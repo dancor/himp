@@ -51,7 +51,7 @@ main = do
             span (\ x -> null x || any (`isPrefixOf` x) ["--", "module "]) l
           (imps, rest) = span ("import " `isPrefixOf`) posttop
           in top ++ sort (imps ++ newImports) ++
-            if null imps then [""] else [] ++ rest
+            (if null imps then [""] else []) ++ rest
       length c `seq` writeFile fName . (unlines . addImports) $ lines c
     else hPutStrLn stderr $
       "Unknown variables: " ++ intercalate "," (map fst unfound)
