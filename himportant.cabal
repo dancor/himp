@@ -3,9 +3,9 @@ version:        0.1
 license:        GPL
 license-file:   LICENSE
 author:         dan corson <danl@alum.mit.edu>
-synopsis:       <syn>
+synopsis:       haskell import guesser
 build-type:     Simple
-build-depends:  base, haskell98
+build-depends:  base, haskell98, containers, process
 
 executable:     himportant
 main-is:        Main.hs

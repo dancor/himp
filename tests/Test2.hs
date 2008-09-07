@@ -4,11 +4,6 @@
 
 module Main where
 
-import Data.List
-import Data.Maybe
-import System.Environment
-import System.IO
-import System.Process
 import qualified Data.Map as M
 
 -- not implemented in v1: qualified imports (for Map, Set, etc)
@@ -25,8 +20,8 @@ funcToMod k = do
     -- some heuristics are needed:
     -- Data.List > ByteString
     -- System.IO > ByteString
-    else let
-      mods = map (head . words) $ lines h
+    else let 
+      mods = map (head . words) $ lines h 
       in Just . tryMod "Data.List" mods . tryMod "System.IO" mods $ head mods
 
 main :: IO ()
@@ -44,14 +39,14 @@ main = do
   if null unfound
     then do
       c <- readFile fName
-      let
+      let 
         newImports = nub $ map (("import " ++) . fromJust . snd) found
-        addImports l = if null newImports then l else let
-          (top, posttop) =
+        addImports l = if null newImports then l else let 
+          (top, posttop) = 
             span (\ x -> null x || any (`isPrefixOf` x) ["--", "module "]) l
           (imps, rest) = span ("import " `isPrefixOf`) posttop
-          in top ++ sort (imps ++ newImports) ++
+          in top ++ sort (imps ++ newImports) ++ 
             if null imps then [""] else [] ++ rest
       length c `seq` writeFile fName . (unlines . addImports) $ lines c
-    else hPutStrLn stderr $
+    else hPutStrLn stderr $ 
       "Unknown variables: " ++ intercalate "," (map fst unfound)
