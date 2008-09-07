@@ -20,7 +20,7 @@ funcToMod k = do
   h <- hGetContents pOut
   let
     tryMod mod mods orElse = if mod `elem` mods then mod else orElse
-  return $ if h == "No results found"
+  return $ if h == "No results found\n"
     then Nothing
     -- some heuristics are needed:
     -- Data.List > ByteString
