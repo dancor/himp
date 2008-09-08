@@ -47,8 +47,8 @@ main = do
       let
         newImports = nub $ map (("import " ++) . fromJust . snd) found
         addImports l = if null newImports then l else let
-          (top, posttop) =
-            span (\ x -> null x || any (`isPrefixOf` x) ["--", "module "]) l
+          (top, posttop) = span
+            (\ x -> null x || any (`isPrefixOf` x) ["--", "module ", "#!"]) l
           (imps, rest) = span ("import " `isPrefixOf`) posttop
           in top ++ sort (imps ++ newImports) ++
             (if null imps then [""] else []) ++ rest
