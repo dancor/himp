@@ -23,11 +23,12 @@ funcToMod k = do
   return $ if h == "No results found\n"
     then Nothing
     -- some heuristics are needed:
-    -- Data.List > ByteString
+    -- Data.Function > Data.List > ByteString
     -- System.IO > ByteString
     else let
       mods = map (head . words) $ lines h
-      in Just . tryMod "Data.List" mods . tryMod "System.IO" mods $ head mods
+      in Just . tryMod "Data.Function" mods . tryMod "Data.List" mods . 
+        tryMod "System.IO" mods $ head mods
 
 main :: IO ()
 main = do

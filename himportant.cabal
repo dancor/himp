@@ -10,3 +10,7 @@ build-depends:  base, haskell98, containers, process
 executable:     himportant
 main-is:        Main.hs
 hs-source-dirs: src
+
+executable:     hsig
+main-is:        Hsig.hs
+hs-source-dirs: src
