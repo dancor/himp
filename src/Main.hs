@@ -70,10 +70,13 @@ main = do
       let
         newImports = nub $ map (("import " ++) . fromJust . snd) found
         addImports l = if null newImports then l else let
-          (top, posttop) = span
-            (\ x -> null x || any (`isPrefixOf` x) ["--", "module ", "#!"]) l
+          (preMod, afterMod) = case break ("module " `isPrefixOf`) l of
+            (all, []) -> ([], all)
+            x -> x
+          (top, posttop) = span (\ x -> null x || 
+            any (`isPrefixOf` x) ["--", "module ", "#!"]) afterMod
           (imps, rest) = span ("import " `isPrefixOf`) posttop
-          in top ++ sort (imps ++ newImports) ++
+          in preMod ++ top ++ sort (imps ++ newImports) ++
             (if null imps then [""] else []) ++ rest
       length c `seq` writeFile fName . (unlines . addImports) $ lines c
     else hPutStrLn stderr $
