@@ -36,14 +36,16 @@ headOr e _ = e
 
 lookForDir dir = do
   let mainF = dir ++ "/" ++ "Main.hs"
-  e <- doesFileExist mainF
-  if e
-    then return [mainF]
-    else do
-      files <- getDirectoryContents dir
-      return $ case filter (".hs" `isSuffixOf`) files of
-        [file] -> [dir ++ "/" ++ file]
-        _ -> []
+  doesDirectoryExist dir >>= \ t -> if t
+    then do
+      doesFileExist mainF >>= \ t -> if t
+        then return [mainF]
+        else do
+          files <- getDirectoryContents dir
+          return $ case filter (".hs" `isSuffixOf`) files of
+            [file] -> [dir ++ "/" ++ file]
+            _ -> []
+    else return []
 
 main :: IO ()
 main = do
@@ -53,6 +55,7 @@ main = do
     [] -> fmap (headOr err . concat) $ mapM lookForDir ["src", "."]
     [fName] -> return fName
     _ -> err
+  hPutStrLn stderr fName
   (pIn, pOut, pErr, pId) <- runInteractiveProcess "ghc" args Nothing Nothing
   waitForProcess pId
   errStr <- hGetContents pErr
