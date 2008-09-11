@@ -6,6 +6,7 @@ module Main where
 
 import Data.List
 import Data.Maybe
+import System.Directory
 import System.Environment
 import System.IO
 import System.Process
@@ -19,7 +20,7 @@ funcToMod k = do
   waitForProcess pId
   h <- hGetContents pOut
   let
-    tryMod mod mods orElse = if mod `elem` mods then mod else orElse
+    tryMod mods mod orElse = if mod `elem` mods then mod else orElse
   return $ if h == "No results found\n"
     then Nothing
     -- some heuristics are needed:
@@ -27,13 +28,31 @@ funcToMod k = do
     -- System.IO > ByteString
     else let
       mods = map (head . words) $ lines h
-      in Just . tryMod "Data.Function" mods . tryMod "Data.List" mods . 
-        tryMod "System.IO" mods $ head mods
+      in Just $ foldr (tryMod mods) (head mods) 
+        ["Data.Function", "Data.List", "System.IO"]
+
+headOr _ (x:_) = x
+headOr e _ = e
+
+lookForDir dir = do
+  let mainF = dir ++ "/" ++ "Main.hs"
+  e <- doesFileExist mainF
+  if e
+    then return [mainF]
+    else do
+      files <- getDirectoryContents dir
+      return $ case filter (".hs" `isSuffixOf`) files of
+        [file] -> [dir ++ "/" ++ file]
+        _ -> []
 
 main :: IO ()
 main = do
   args <- getArgs
-  let fName:_ = args
+  let err = error "usage"
+  fName <- case args of
+    [] -> fmap (headOr err . concat) $ mapM lookForDir ["src", "."]
+    [fName] -> return fName
+    _ -> err
   (pIn, pOut, pErr, pId) <- runInteractiveProcess "ghc" args Nothing Nothing
   waitForProcess pId
   errStr <- hGetContents pErr

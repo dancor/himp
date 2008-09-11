@@ -1,5 +1,7 @@
 #!/usr/bin/env runhaskell
 
+-- add type signatures to all top-level vars in a haskell file
+
 import Control.Arrow
 import Data.Function
 import Data.List
