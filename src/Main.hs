@@ -51,12 +51,12 @@ main :: IO ()
 main = do
   args <- getArgs
   let err = error "usage"
-  fName <- case args of
-    [] -> fmap (headOr err . concat) $ mapM lookForDir ["src", "."]
-    [fName] -> return fName
-    _ -> err
+  args' <- case args of
+    [] -> fmap concat $ mapM lookForDir ["src", "."]
+    x -> return x
+  let fName = headOr err args'
   hPutStrLn stderr fName
-  (pIn, pOut, pErr, pId) <- runInteractiveProcess "ghc" args Nothing Nothing
+  (pIn, pOut, pErr, pId) <- runInteractiveProcess "ghc" args' Nothing Nothing
   waitForProcess pId
   errStr <- hGetContents pErr
   let
@@ -66,6 +66,7 @@ main = do
   let (found, unfound) = partition (isJust . snd) $ zip funcs modMbList
   if null unfound
     then do
+      hPutStrLn stderr $ "Added imports: " ++ show found
       c <- readFile fName
       let
         newImports = nub $ map (("import " ++) . fromJust . snd) found
