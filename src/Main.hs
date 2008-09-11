@@ -6,10 +6,13 @@ module Main where
 
 import Data.List
 import Data.Maybe
+import Hsig
+import HSH
 import System.Directory
 import System.Environment
 import System.IO
 import System.Process
+import FUtil
 import qualified Data.Map as M
 
 -- not implemented in v1: qualified imports (for Map, Set, etc)
@@ -31,32 +34,28 @@ funcToMod k = do
       in Just $ foldr (tryMod mods) (head mods) 
         ["Data.Function", "Data.List", "System.IO"]
 
+headOr :: t -> [t] -> t
 headOr _ (x:_) = x
 headOr e _ = e
 
+lookForDir :: FilePath -> IO [(FilePath, [Char])]
 lookForDir dir = do
-  let mainF = dir ++ "/" ++ "Main.hs"
+  let mainF = "Main.hs"
   doesDirectoryExist dir >>= \ t -> if t
     then do
-      doesFileExist mainF >>= \ t -> if t
-        then return [mainF]
+      doesFileExist (dir ++ "/" ++ mainF) >>= \ t -> if t
+        then return [(dir, mainF)]
         else do
           files <- getDirectoryContents dir
           return $ case filter (".hs" `isSuffixOf`) files of
-            [file] -> [dir ++ "/" ++ file]
+            [file] -> [(dir, file)]
             _ -> []
     else return []
 
-main :: IO ()
-main = do
-  args <- getArgs
-  let err = error "usage"
-  args' <- case args of
-    [] -> fmap concat $ mapM lookForDir ["src", "."]
-    x -> return x
-  let fName = headOr err args'
-  hPutStrLn stderr fName
-  (pIn, pOut, pErr, pId) <- runInteractiveProcess "ghc" args' Nothing Nothing
+addImports :: String -> [String] -> IO ()
+addImports fPath ghcArgs = do
+  (pIn, pOut, pErr, pId) <- runInteractiveProcess "ghc" (fPath:ghcArgs)
+    Nothing Nothing
   waitForProcess pId
   errStr <- hGetContents pErr
   let
@@ -67,7 +66,7 @@ main = do
   if null unfound
     then do
       hPutStrLn stderr $ "Added imports: " ++ show found
-      c <- readFile fName
+      c <- readFile fPath
       let
         newImports = nub $ map (("import " ++) . fromJust . snd) found
         addImports l = if null newImports then l else let
@@ -79,6 +78,39 @@ main = do
           (imps, rest) = span ("import " `isPrefixOf`) posttop
           in preMod ++ top ++ sort (imps ++ newImports) ++
             (if null imps then [""] else []) ++ rest
-      length c `seq` writeFile fName . (unlines . addImports) $ lines c
+      length c `seq` writeFile fPath . (unlines . addImports) $ lines c
     else hPutStrLn stderr $
       "Unknown variables: " ++ intercalate "," (map fst unfound)
+
+killSuff :: (Eq a) => a -> [a] -> [a]
+killSuff c = reverse . drop 1 . dropWhile (/= c) . reverse
+
+addDepends :: ([Char], [Char]) -> IO ()
+addDepends (fDir, fName) = do
+  files <- getDirectoryContents "."
+  case filter (".cabal" `isSuffixOf`) files of
+    [file] -> do
+      o <- run ("hbuild", ["-i" ++ fDir, killSuff '.' fName])
+      let depsVers = drop 2 . dropWhile (/= ':') $ (lines o) !! 2
+          deps = sort . map (killSuff '-') $ breaksOnSubl ", " depsVers
+          sedEsc = concatMap (\ x -> case x of
+            '/' -> "\\/"
+            x -> [x])
+      runIO ("sed", ["-i", file, "-e", "s/^\\(build-depends: *\\).*/\\1" ++ 
+        sedEsc (intercalate ", " deps) ++ "/"])
+      hPutStrLn stderr $ "Set depends: " ++ show deps
+    _ -> return ()
+
+main :: IO ()
+main = do
+  args <- getArgs
+  let err = error "usage"
+  ((fDir, fName), ghcArgs) <- case args of
+    [] -> 
+      fmap (flip (,) [] . headOr err . concat) $ mapM lookForDir ["src", "."]
+    f:a -> return ((".", f), a)
+  let fPath = fDir ++ "/" ++ fName
+  hPutStrLn stderr fPath
+  addImports fPath ghcArgs
+  addDepends (fDir, fName)
+  addSigs (fDir, fName)
