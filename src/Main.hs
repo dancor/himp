@@ -30,7 +30,7 @@ funcToMod k = do
     -- Data.Function > Data.List > ByteString
     -- System.IO > ByteString
     else let
-      mods = map (head . words) $ lines h
+      mods = map head . filter ((== k) . (!! 1)) . map words $ lines h
       in Just $ foldr (tryMod mods) (head mods) 
         ["Data.Function", "Data.List", "System.IO"]
 
