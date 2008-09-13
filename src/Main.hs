@@ -4,6 +4,7 @@
 
 module Main where
 
+import Control.Arrow
 import Data.List
 import Data.Maybe
 import Hsig
@@ -85,8 +86,11 @@ addImports fPath ghcArgs = do
 killSuff :: (Eq a) => a -> [a] -> [a]
 killSuff c = reverse . drop 1 . dropWhile (/= c) . reverse
 
-addDepends :: ([Char], [Char]) -> IO ()
-addDepends (fDir, fName) = do
+addDepends :: [Char] -> IO ()
+addDepends fPath = do
+  let
+    (fName, fDir) = first reverse . second reverse . break (== '/') $ 
+      reverse fPath
   files <- getDirectoryContents "."
   case filter (".cabal" `isSuffixOf`) files of
     [file] -> do
@@ -112,5 +116,5 @@ main = do
   let fPath = fDir ++ "/" ++ fName
   hPutStrLn stderr fPath
   addImports fPath ghcArgs
-  addDepends (fDir, fName)
+  addDepends fPath
   addSigs (fDir, fName)

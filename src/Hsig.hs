@@ -22,9 +22,7 @@ parseVars (HsFunBind ((HsMatch srcLoc (HsIdent var) _ _ _):_)) =
 parseVars (HsPatBind srcLoc (HsPVar (HsIdent var)) _ _) =
   [Left (var, srcLine srcLoc)]
 parseVars (HsTypeSig _ ((HsIdent v):_) _) = [Right v]
-parseVars (HsDataDecl _ _ _ _ _ _ _) = []
-parseVars (HsTypeDecl _ _ _ _) = []
-parseVars x = error $ "Unknown parse-ery: " ++ show x
+parseVars _ = []
 
 -- do i even need nub
 getVars :: ParseResult HsModule -> [Either (String, Int) String]
