@@ -2,13 +2,17 @@
 -- you must have hoogle installed
 -- usage: himportant <source-file> <further-args-for-ghc>
 
+-- not implemented in v1: qualified imports (for Map, Set, etc)
+
 module Main where
 
 import Control.Arrow
+import Control.Monad
 import Data.List
 import Data.Maybe
 import Hsig
 import HSH
+import System.Console.GetOpt
 import System.Directory
 import System.Environment
 import System.IO
@@ -16,7 +20,14 @@ import System.Process
 import FUtil
 import qualified Data.Map as M
 
--- not implemented in v1: qualified imports (for Map, Set, etc)
+data Options = OptImports | OptDepends | OptTypeSigs deriving Eq
+
+options :: [OptDescr Options]
+options = [
+  Option "i" ["imports"] (NoArg OptImports) "",
+  Option "d" ["depends"] (NoArg OptDepends) "",
+  Option "t" ["type-signatures"] (NoArg OptTypeSigs) ""
+  ]
 
 funcToMod :: String -> IO (Maybe String)
 funcToMod k = do
@@ -108,13 +119,20 @@ addDepends fPath = do
 main :: IO ()
 main = do
   args <- getArgs
-  let err = error "usage"
-  ((fDir, fName), ghcArgs) <- case args of
-    [] -> 
-      fmap (flip (,) [] . headOr err . concat) $ mapM lookForDir ["src", "."]
+  let 
+    usage = "usage: himp [options] [file] [ghc-options]"
+    doErr e = error $ e ++ usageInfo usage options
+    (opts, moreArgs) = case getOpt Permute options args of
+      (o, n, []) -> (o, n)
+      (_, _, errs) -> doErr $ concat errs
+  ((fDir, fName), ghcArgs) <- case moreArgs of
+    [] -> fmap (flip (,) [] . headOr (doErr "") . concat) $ 
+      mapM lookForDir ["src", "."]
     f:a -> return ((".", f), a)
-  let fPath = fDir ++ "/" ++ fName
+  let 
+    fPath = fDir ++ "/" ++ fName
+    shouldDo opt = null opts || opt `elem` opts
   hPutStrLn stderr fPath
-  addImports fPath ghcArgs
-  addDepends fPath
-  addSigs (fDir, fName)
+  when (shouldDo OptImports) $ addImports fPath ghcArgs
+  when (shouldDo OptDepends) $ addDepends fPath
+  when (shouldDo OptTypeSigs) $ addSigs (fDir, fName)
