@@ -20,13 +20,14 @@ import System.Process
 import FUtil
 import qualified Data.Map as M
 
-data Options = OptImports | OptDepends | OptTypeSigs deriving Eq
+data Options = OptImports | OptDepends | OptTypeSigs | OptBuild deriving Eq
 
 options :: [OptDescr Options]
 options = [
   Option "i" ["imports"] (NoArg OptImports) "",
   Option "d" ["depends"] (NoArg OptDepends) "",
-  Option "t" ["type-signatures"] (NoArg OptTypeSigs) ""
+  Option "t" ["type-signatures"] (NoArg OptTypeSigs) "",
+  Option "b" ["build"] (NoArg OptBuild) ""
   ]
 
 funcToMod :: String -> IO (Maybe String)
@@ -64,10 +65,14 @@ lookForDir dir = do
             _ -> []
     else return []
 
-addImports :: String -> [String] -> IO ()
+addImports :: String -> [String] -> IO Bool
 addImports fPath ghcArgs = do
-  (pIn, pOut, pErr, pId) <- runInteractiveProcess "ghc" (fPath:ghcArgs)
-    Nothing Nothing
+  let
+    (fName, fDir) = first reverse . second reverse . break (== '/') $ 
+      reverse fPath
+    iArgs = "--make":map ("-i" ++) [fDir, "dist/build/autogen"]
+  (pIn, pOut, pErr, pId) <- 
+    runInteractiveProcess "ghc" (fPath:iArgs ++ ghcArgs) Nothing Nothing
   waitForProcess pId
   errStr <- hGetContents pErr
   let
@@ -91,13 +96,16 @@ addImports fPath ghcArgs = do
           in preMod ++ top ++ sort (imps ++ newImports) ++
             (if null imps then [""] else []) ++ rest
       length c `seq` writeFile fPath . (unlines . addImports) $ lines c
-    else hPutStrLn stderr $
-      "Unknown variables: " ++ intercalate "," (map fst unfound)
+      return True
+    else do
+      hPutStrLn stderr $
+        "Unknown variables: " ++ intercalate "," (map fst unfound)
+      return False
 
 killSuff :: (Eq a) => a -> [a] -> [a]
 killSuff c = reverse . drop 1 . dropWhile (/= c) . reverse
 
-addDepends :: [Char] -> IO ()
+addDepends :: [Char] -> IO Bool
 addDepends fPath = do
   let
     (fName, fDir) = first reverse . second reverse . break (== '/') $ 
@@ -114,7 +122,8 @@ addDepends fPath = do
       runIO ("sed", ["-i", file, "-e", "s/^\\(build-depends: *\\).*/\\1" ++ 
         sedEsc (intercalate ", " deps) ++ "/"])
       hPutStrLn stderr $ "Set depends: " ++ show deps
-    _ -> return ()
+      return True
+    _ -> return True
 
 main :: IO ()
 main = do
@@ -131,8 +140,10 @@ main = do
     f:a -> return ((".", f), a)
   let 
     fPath = fDir ++ "/" ++ fName
-    shouldDo opt = null opts || opt `elem` opts
+    tryIfOpt opt f = when (null opts || opt `elem` opts) .
+      unlessM f $ error "Step failed; aborting."
   hPutStrLn stderr fPath
-  when (shouldDo OptImports) $ addImports fPath ghcArgs
-  when (shouldDo OptDepends) $ addDepends fPath
-  when (shouldDo OptTypeSigs) $ addSigs (fDir, fName)
+  tryIfOpt OptImports $ addImports fPath ghcArgs
+  tryIfOpt OptDepends $ addDepends fPath
+  tryIfOpt OptTypeSigs $ addSigs (fDir, fName)
+  tryIfOpt OptBuild $ HSH.runIO "cabal install" >> return True

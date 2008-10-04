@@ -55,3 +55,4 @@ addSigs (fDir, fName) = do
       foldr M.delete varAll varSig
   mapM_ (doSig (fDir, fName) linesOffset) varUnsig
   hPutStrLn stderr "Checked type-sigs"
+  return True

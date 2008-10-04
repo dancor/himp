@@ -1,0 +1,2 @@
+Also depends on binaries from: cabal-install, hbuild, hoogle.
+I don't know how to express these deps in cabal..
