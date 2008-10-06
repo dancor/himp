@@ -37,15 +37,17 @@ funcToMod k = do
   h <- hGetContents pOut
   let
     tryMod mods mod orElse = if mod `elem` mods then mod else orElse
-  return $ if h == "No results found\n"
-    then Nothing
+    mods = 
+      filter ((\ x -> x == k || x == "(" ++ k ++ ")") . (!! 1)) . map words $
+      lines h
+    mods' = map head mods
+  return $ if h == "No results found\n" || null mods then Nothing else 
+    -- fixme: are these still needed?
     -- some heuristics are needed:
     -- Data.Function > Data.List > ByteString
     -- System.IO > ByteString
-    else let
-      mods = map head . filter ((== k) . (!! 1)) . map words $ lines h
-      in Just $ foldr (tryMod mods) (head mods) 
-        ["Data.Function", "Data.List", "System.IO"]
+    Just $ foldr (tryMod mods') (head mods') 
+      ["Data.Function", "Data.List", "System.IO"]
 
 headOr :: t -> [t] -> t
 headOr _ (x:_) = x
