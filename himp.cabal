@@ -7,6 +7,6 @@ synopsis:       haskell import guesser
 build-type:     Simple
 build-depends:  FUtil, HSH, base, containers, directory, haskell-src-exts, process
 
-executable:     himportant
+executable:     himp
 main-is:        Main.hs
 hs-source-dirs: src

@@ -8,8 +8,10 @@ module Main where
 
 import Control.Arrow
 import Control.Monad
+import Data.Char
 import Data.List
 import Data.Maybe
+import FUtil
 import Hsig
 import HSH
 import System.Console.GetOpt
@@ -37,16 +39,16 @@ funcToMod k = do
   h <- hGetContents pOut
   let
     tryMod mods mod orElse = if mod `elem` mods then mod else orElse
-    mods = 
+    mods =
       filter ((\ x -> x == k || x == "(" ++ k ++ ")") . (!! 1)) . map words $
       lines h
     mods' = map head mods
-  return $ if h == "No results found\n" || null mods then Nothing else 
+  return $ if h == "No results found\n" || null mods then Nothing else
     -- fixme: are these still needed?
     -- some heuristics are needed:
     -- Data.Function > Data.List > ByteString
     -- System.IO > ByteString
-    Just $ foldr (tryMod mods') (head mods') 
+    Just $ foldr (tryMod mods') (head mods')
       ["Data.Function", "Data.List", "System.IO"]
 
 headOr :: t -> [t] -> t
@@ -70,10 +72,10 @@ lookForDir dir = do
 addImports :: String -> [String] -> IO Bool
 addImports fPath ghcArgs = do
   let
-    (fName, fDir) = first reverse . second reverse . break (== '/') $ 
+    (fName, fDir) = first reverse . second reverse . break (== '/') $
       reverse fPath
     iArgs = "--make":map ("-i" ++) [fDir, "dist/build/autogen"]
-  (pIn, pOut, pErr, pId) <- 
+  (pIn, pOut, pErr, pId) <-
     runInteractiveProcess "ghc" (fPath:iArgs ++ ghcArgs) Nothing Nothing
   waitForProcess pId
   errStr <- hGetContents pErr
@@ -92,7 +94,7 @@ addImports fPath ghcArgs = do
           (preMod, afterMod) = case break ("module " `isPrefixOf`) l of
             (all, []) -> ([], all)
             x -> x
-          (top, posttop) = span (\ x -> null x || 
+          (top, posttop) = span (\ x -> null x ||
             any (`isPrefixOf` x) ["--", "module ", "#!"]) afterMod
           (imps, rest) = span ("import " `isPrefixOf`) posttop
           in preMod ++ top ++ sort (imps ++ newImports) ++
@@ -107,10 +109,19 @@ addImports fPath ghcArgs = do
 killSuff :: (Eq a) => a -> [a] -> [a]
 killSuff c = reverse . drop 1 . dropWhile (/= c) . reverse
 
+wordComb :: Int -> [a] -> [[a]] -> [[a]]
+wordComb _ _ [] = [[]]
+wordComb len sp (w:ws) = wordCombCur ws w where
+  wordCombCur [] curStr = [curStr]
+  wordCombCur (w:ws) curStr = let curStr' = curStr ++ sp ++ w in
+    if length curStr' > len
+      then curStr:wordCombCur ws w
+      else wordCombCur ws curStr'
+
 addDepends :: [Char] -> IO Bool
 addDepends fPath = do
   let
-    (fName, fDir) = first reverse . second reverse . break (== '/') $ 
+    (fName, fDir) = first reverse . second reverse . break (== '/') $
       reverse fPath
   files <- getDirectoryContents "."
   case filter (".cabal" `isSuffixOf`) files of
@@ -121,8 +132,29 @@ addDepends fPath = do
           sedEsc = concatMap (\ x -> case x of
             '/' -> "\\/"
             x -> [x])
-      runIO ("sed", ["-i", file, "-e", "s/^\\(build-depends: *\\).*/\\1" ++ 
-        sedEsc (intercalate ", " deps) ++ "/"])
+      c <- readFileStrict file
+      let
+        l = lines c
+        buildDepHeader = "build-depends:"
+        (preDeps, rest) = break
+          ((filter (not . isSpace) buildDepHeader `isPrefixOf`) .
+          map toLower . dropWhile isSpace) l
+        (depsAndSpace, postDeps) =
+          first (take 1 rest ++) $ break (':' `elem`) (drop 1 rest)
+        (preSpace, depsAndPostSpace) = (fst *** uncurry (:)) . seqTup .
+          first (span isSpace) $ uncons depsAndSpace
+        interSpace = takeWhile isSpace . drop (length buildDepHeader) $
+          head depsAndPostSpace
+        interSpace' = if null interSpace then " " else interSpace
+        (postSpace, depsOrig) = bothond reverse . span (all isSpace) $
+          reverse depsAndPostSpace
+        buildDepHeaderSpace = buildDepHeader ++ interSpace'
+        depsNew = zipWith (++) (map (preSpace ++) $
+          buildDepHeaderSpace:
+          repeat (replicate (length buildDepHeaderSpace) ' ')) .
+          wordComb (79 - 1 - length buildDepHeaderSpace) " " $
+          map (++ ",") (init deps) ++ [last deps]
+      writeFile file . unlines $ preDeps ++ depsNew ++ postSpace ++ postDeps
       hPutStrLn stderr $ "Set depends: " ++ show deps
       return True
     _ -> return True
@@ -130,17 +162,17 @@ addDepends fPath = do
 main :: IO ()
 main = do
   args <- getArgs
-  let 
+  let
     usage = "usage: himp [options] [file] [ghc-options]"
     doErr e = error $ e ++ usageInfo usage options
     (opts, moreArgs) = case getOpt Permute options args of
       (o, n, []) -> (o, n)
       (_, _, errs) -> doErr $ concat errs
   ((fDir, fName), ghcArgs) <- case moreArgs of
-    [] -> fmap (flip (,) [] . headOr (doErr "") . concat) $ 
+    [] -> fmap (flip (,) [] . headOr (doErr "") . concat) $
       mapM lookForDir ["src", "."]
     f:a -> return ((".", f), a)
-  let 
+  let
     fPath = fDir ++ "/" ++ fName
     tryIfOpt opt f = when (null opts || opt `elem` opts) .
       unlessM f $ error "Step failed; aborting."
