@@ -22,12 +22,14 @@ import System.Process
 import FUtil
 import qualified Data.Map as M
 
-data Options = OptImports | OptDepends | OptTypeSigs | OptBuild deriving Eq
+data Options = OptImports | OptDepends | OptDependsNuke | OptTypeSigs |
+  OptBuild deriving Eq
 
 options :: [OptDescr Options]
 options = [
   Option "i" ["imports"] (NoArg OptImports) "",
   Option "d" ["depends"] (NoArg OptDepends) "",
+  Option "D" ["depends-nuke-old"] (NoArg OptDependsNuke) "",
   Option "t" ["type-signatures"] (NoArg OptTypeSigs) "",
   Option "b" ["build"] (NoArg OptBuild) ""
   ]
@@ -118,8 +120,8 @@ wordComb len sp (w:ws) = wordCombCur ws w where
       then curStr:wordCombCur ws w
       else wordCombCur ws curStr'
 
-addDepends :: [Char] -> IO Bool
-addDepends fPath = do
+addDepends :: [Char] -> Bool -> IO Bool
+addDepends fPath justAdd = do
   let
     (fName, fDir) = first reverse . second reverse . break (== '/') $
       reverse fPath
@@ -141,21 +143,26 @@ addDepends fPath = do
           map toLower . dropWhile isSpace) l
         (depsAndSpace, postDeps) =
           first (take 1 rest ++) $ break (':' `elem`) (drop 1 rest)
-        (preSpace, depsAndPostSpace) = (fst *** uncurry (:)) . seqTup .
+        depsAndInterPostSpace :: [String]
+        (preSpace, depsAndInterPostSpace) = (fst *** uncurry (:)) . seqTup .
           first (span isSpace) $ uncons depsAndSpace
-        interSpace = takeWhile isSpace . drop (length buildDepHeader) $
-          head depsAndPostSpace
+        (interSpace, depsAndPostSpace) = (fst *** uncurry (:)) $ seqTup .
+          first (span isSpace . drop (length buildDepHeader)) $
+          uncons depsAndInterPostSpace
         interSpace' = if null interSpace then " " else interSpace
-        (postSpace, depsOrig) = bothond reverse . span (all isSpace) $
+        (postSpace, depsOrigStr) = bothond reverse . span (all isSpace) $
           reverse depsAndPostSpace
+        depsOrig = filter (not . null) . uncalate "," .
+          filter (not . isSpace) $ intercalate "," depsOrigStr
         buildDepHeaderSpace = buildDepHeader ++ interSpace'
-        depsNew = zipWith (++) (map (preSpace ++) $
+        deps' = nub . sort $ if justAdd then deps ++ depsOrig else deps
+        depsLines = zipWith (++) (map (preSpace ++) $
           buildDepHeaderSpace:
           repeat (replicate (length buildDepHeaderSpace) ' ')) .
           wordComb (79 - 1 - length buildDepHeaderSpace) " " $
-          map (++ ",") (init deps) ++ [last deps]
-      writeFile file . unlines $ preDeps ++ depsNew ++ postSpace ++ postDeps
-      hPutStrLn stderr $ "Set depends: " ++ show deps
+          map (++ ",") (init deps') ++ [last deps']
+      writeFile file . unlines $ preDeps ++ depsLines ++ postSpace ++ postDeps
+      hPutStrLn stderr $ "Did depends: " ++ show deps
       return True
     _ -> return True
 
@@ -174,10 +181,11 @@ main = do
     f:a -> return ((".", f), a)
   let
     fPath = fDir ++ "/" ++ fName
-    tryIfOpt opt f = when (null opts || opt `elem` opts) .
+    tryIfOpt def opt f = when (def && null opts || opt `elem` opts) .
       unlessM f $ error "Step failed; aborting."
   hPutStrLn stderr fPath
-  tryIfOpt OptImports $ addImports fPath ghcArgs
-  tryIfOpt OptDepends $ addDepends fPath
-  tryIfOpt OptTypeSigs $ addSigs (fDir, fName)
-  tryIfOpt OptBuild $ HSH.runIO "cabal install" >> return True
+  tryIfOpt True OptImports $ addImports fPath ghcArgs
+  tryIfOpt True OptDepends $ addDepends fPath True
+  tryIfOpt False OptDependsNuke $ addDepends fPath False
+  tryIfOpt True OptTypeSigs $ addSigs (fDir, fName)
+  tryIfOpt True OptBuild $ HSH.runIO "cabal install" >> return True
