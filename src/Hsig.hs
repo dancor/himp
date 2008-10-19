@@ -17,6 +17,7 @@ dropHashBang :: [[Char]] -> (Int, [[Char]])
 dropHashBang (('#':'!':_):rest) = (1, rest)
 dropHashBang rest = (0, rest)
 
+parseVars :: HsDecl -> [Either (String, Int) String]
 parseVars (HsFunBind ((HsMatch srcLoc (HsIdent var) _ _ _):_)) = 
   [Left (var, srcLine srcLoc)]
 parseVars (HsPatBind srcLoc (HsPVar (HsIdent var)) _ _) =
@@ -34,6 +35,7 @@ eithersSplit [] = ([], [])
 eithersSplit ((Left x):rest) = first (x:) $ eithersSplit rest
 eithersSplit ((Right x):rest) = second (x:) $ eithersSplit rest
 
+doSig :: (Num t) => ([Char], [Char]) -> t -> ([Char], t) -> IO ()
 doSig (fDir, fName) linesOffset (func, line) = do
   let file = fDir ++ "/" ++ fName
   -- fixme: just rewrite to insert lines in haskell?
@@ -44,6 +46,7 @@ doSig (fDir, fName) linesOffset (func, line) = do
   runIO $ ("echo",
     [show (line + linesOffset) ++ "i\n" ++ o ++ ".\nw"]) -|- ("ed", [file])
 
+addSigs :: ([Char], [Char]) -> IO Bool
 addSigs (fDir, fName) = do
   let file = fDir ++ "/" ++ fName
   c <- readFile file

@@ -170,22 +170,25 @@ main :: IO ()
 main = do
   args <- getArgs
   let
-    usage = "usage: himp [options] [file] [ghc-options]"
+    usage = "usage: himp [options] [files]"
     doErr e = error $ e ++ usageInfo usage options
     (opts, moreArgs) = case getOpt Permute options args of
       (o, n, []) -> (o, n)
       (_, _, errs) -> doErr $ concat errs
-  ((fDir, fName), ghcArgs) <- case moreArgs of
-    [] -> fmap (flip (,) [] . headOr (doErr "") . concat) $
+  (fDir, fNames) <- case moreArgs of
+    [] -> fmap (second (:[]) . headOr (doErr "") . concat) $
       mapM lookForDir ["src", "."]
-    f:a -> return ((".", f), a)
+    fs -> return (".", fs)
   let
-    fPath = fDir ++ "/" ++ fName
     tryIfOpt def opt f = when (def && null opts || opt `elem` opts) .
       unlessM f $ error "Step failed; aborting."
-  hPutStrLn stderr fPath
-  tryIfOpt True OptImports $ addImports fPath ghcArgs
-  tryIfOpt True OptDepends $ addDepends fPath True
-  tryIfOpt False OptDependsNuke $ addDepends fPath False
-  tryIfOpt True OptTypeSigs $ addSigs (fDir, fName)
+    f fName = do
+      let
+        fPath = fDir ++ "/" ++ fName
+      hPutStrLn stderr fPath
+      tryIfOpt True OptImports $ addImports fPath []
+      tryIfOpt True OptDepends $ addDepends fPath True
+      tryIfOpt False OptDependsNuke $ addDepends fPath False
+      tryIfOpt True OptTypeSigs $ addSigs (fDir, fName)
+  mapM_ f fNames
   tryIfOpt True OptBuild $ HSH.runIO "cabal install" >> return True
