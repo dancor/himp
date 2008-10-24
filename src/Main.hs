@@ -201,4 +201,4 @@ main = do
   -- fixme: or build without cabal (maybe only do that when -b explicitly
   --    given?)
   tryIfOpt True OptBuild . ifM (null <$> globsOrNot ["*.cabal"])
-    (return True) $ HSH.runIO "cabal install" >> return True
+    (HSH.runIO "cabal install" >> return True) $ return True
