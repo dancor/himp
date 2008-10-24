@@ -3,8 +3,10 @@
 module Hsig where
 
 import Control.Arrow
+import Control.Monad
 import Data.Function
 import Data.List
+import FUtil
 import HSH
 import Language.Haskell.Exts.Parser
 import Language.Haskell.Exts.Syntax
@@ -13,49 +15,67 @@ import System.Environment
 import qualified Data.Map as M
 import qualified Data.Set as S
 
-dropHashBang :: [[Char]] -> (Int, [[Char]])
-dropHashBang (('#':'!':_):rest) = (1, rest)
-dropHashBang rest = (0, rest)
+dropHashBang (l@('#':'!':_):rest) = (rest, [l])
+dropHashBang rest = (rest, [])
 
 parseVars :: HsDecl -> [Either (String, Int) String]
-parseVars (HsFunBind ((HsMatch srcLoc (HsIdent var) _ _ _):_)) = 
+parseVars (HsFunBind ((HsMatch srcLoc (HsIdent var) _ _ _):_)) =
   [Left (var, srcLine srcLoc)]
 parseVars (HsPatBind srcLoc (HsPVar (HsIdent var)) _ _) =
   [Left (var, srcLine srcLoc)]
 parseVars (HsTypeSig _ ((HsIdent v):_) _) = [Right v]
 parseVars _ = []
 
+getDecls (ParseOk (HsModule _ _ _ _ decls)) = decls
+getDecls x = error $ "Unknown parse result: " ++ show x
+
+getModuleName (ParseOk (HsModule _ moduleName _ _ _)) = moduleName
+getModuleName x = error $ "Unknown parse result: " ++ show x
+
 -- do i even need nub
-getVars :: ParseResult HsModule -> [Either (String, Int) String]
-getVars (ParseOk (HsModule _ _ _ _ decls)) = nub $ concatMap parseVars decls
-getVars x = error $ "Unknown parse result: " ++ show x
+getVars = nub . concatMap parseVars
 
 eithersSplit :: [Either a a1] -> ([a], [a1])
 eithersSplit [] = ([], [])
 eithersSplit ((Left x):rest) = first (x:) $ eithersSplit rest
 eithersSplit ((Right x):rest) = second (x:) $ eithersSplit rest
 
-doSig :: (Num t) => ([Char], [Char]) -> t -> ([Char], t) -> IO ()
-doSig (fDir, fName) linesOffset (func, line) = do
-  let file = fDir ++ "/" ++ fName
-  -- fixme: just rewrite to insert lines in haskell?
-  -- fixme: must be able to use HSH.ShellEquivs.echo ?
-  o <- run $ 
-    ("echo", [":t", func]) -|- ("ghci", ["-v0", "-w", "-i" ++ fDir, file])
-  -- no way to suppress stderr line count-ery from ed with HSH..
-  runIO $ ("echo",
-    [show (line + linesOffset) ++ "i\n" ++ o ++ ".\nw"]) -|- ("ed", [file])
+doSig (fDir, fName) (Module moduleName) lines funcLines = do                      let                                                                               file = fDir ++ "/" ++ fName
+  os <- mapM (\ (func, lines) -> do                                                 o <- run $                                                                        ("echo", [":t", moduleName ++ "." ++ func]) -|-
+      ("ghci", ["-v0", "-w", "-i" ++ fDir, file])
+    let
+      [sig] = o
+      Just (name, funcType) = breakOnSubl " :: " sig
+    return (drop 1 $ dropWhile (/= '.') name, funcType)
+    ) funcLines
+  let
+    (names, funcTypes) = unzip os
+    lineNum = minimum $ map snd funcLines
+    newSig = intercalate ", " (reverse names) ++ " :: " ++ head funcTypes
+  when (length (group funcTypes) /= 1) $
+    -- fixme more info in error
+    error "Adjacent functions have unmatching types."
+  return $ take (lineNum - 1) lines ++ [newSig] ++ drop (lineNum - 1) lines
 
 addSigs :: ([Char], [Char]) -> IO Bool
 addSigs (fDir, fName) = do
   let file = fDir ++ "/" ++ fName
-  c <- readFile file
+  c <- readFileStrict file
   let
-    (linesOffset, lines') = dropHashBang $ lines c
-    (varAll, varSig) = first M.fromList . eithersSplit . 
-      getVars . parseModule $ unlines lines'
+    (lines', header) = dropHashBang $ lines c
+    parse = parseModule $ unlines lines'
+    decls = getDecls parse
+    vars = getVars decls
+    (varAll, varSig) = first M.fromList $ eithersSplit vars
     varUnsig = reverse . sortBy (compare `on` snd) . M.toList $
       foldr M.delete varAll varSig
-  mapM_ (doSig (fDir, fName) linesOffset) varUnsig
+    -- combine adjacent one-liners (maybe do more combination later)
+    varsGrouped = groupByAdj ((\ x y -> x == y + 1) `on` snd) .  reverse .
+      sortBy (compare `on` snd) $ M.toList varAll
+    varUnsigGrouped = groupBy ((==) `on`
+      (\ x -> filter (x `elem`) varsGrouped)) varUnsig
+    moduleName = getModuleName parse
+  lines'' <- foldM (doSig (fDir, fName) moduleName) lines' varUnsigGrouped
+  writeFile file . unlines $ header ++ lines''
   hPutStrLn stderr "Checked type-sigs"
   return True
