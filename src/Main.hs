@@ -51,7 +51,7 @@ funcToMod k = do
     -- Data.Function > Data.List > ByteString
     -- System.IO > ByteString
     Just $ foldr (tryMod mods') (head mods')
-      ["Data.Function", "Data.List", "System.IO"]
+      ["Data.Function", "Data.List", "System.IO", "System.IO.Unsafe"]
 
 headOr :: t -> [t] -> t
 headOr _ (x:_) = x
