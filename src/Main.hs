@@ -74,12 +74,18 @@ lookForDir dir = do
 addImports :: String -> [String] -> IO Bool
 addImports fPath ghcArgs = do
   let
+    objDir = "obj"
     (fName, fDir) = first reverse . second reverse . break (== '/') $
       reverse fPath
-    iArgs = "--make":map ("-i" ++) [fDir, "dist/build/autogen"]
+    iArgs =
+      ["--make", "-o", objDir, "-odir", objDir, "-hidir", objDir] ++
+      map ("-i" ++) [fDir, "dist/build/autogen"]
+  objExistAtStart <- doesDirectoryExist objDir
+  when objExistAtStart $ createDirectory objDir
   (pIn, pOut, pErr, pId) <-
     runInteractiveProcess "ghc" (fPath:iArgs ++ ghcArgs) Nothing Nothing
   waitForProcess pId
+  unless objExistAtStart $ removeDirectoryRecursive objDir
   errStr <- hGetContents pErr
   let
     funcs = map (init . drop 1 . dropWhile (/= '`')) .
