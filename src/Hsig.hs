@@ -15,6 +15,7 @@ import System.Environment
 import qualified Data.Map as M
 import qualified Data.Set as S
 
+dropHashBang :: [[Char]] -> ([[Char]], [[Char]])
 dropHashBang (l@('#':'!':_):rest) = (rest, [l])
 dropHashBang rest = (rest, [])
 
@@ -26,13 +27,16 @@ parseVars (HsPatBind srcLoc (HsPVar (HsIdent var)) _ _) =
 parseVars (HsTypeSig _ ((HsIdent v):_) _) = [Right v]
 parseVars _ = []
 
+getDecls :: ParseResult HsModule -> [HsDecl]
 getDecls (ParseOk (HsModule _ _ _ _ decls)) = decls
 getDecls x = error $ "Unknown parse result: " ++ show x
 
+getModuleName :: ParseResult HsModule -> Module
 getModuleName (ParseOk (HsModule _ moduleName _ _ _)) = moduleName
 getModuleName x = error $ "Unknown parse result: " ++ show x
 
 -- do i even need nub
+getVars :: [HsDecl] -> [Either (String, Int) String]
 getVars = nub . concatMap parseVars
 
 eithersSplit :: [Either a a1] -> ([a], [a1])
@@ -40,11 +44,21 @@ eithersSplit [] = ([], [])
 eithersSplit ((Left x):rest) = first (x:) $ eithersSplit rest
 eithersSplit ((Right x):rest) = second (x:) $ eithersSplit rest
 
-doSig (fDir, fName) (Module moduleName) lines funcLines = do                      let                                                                               file = fDir ++ "/" ++ fName
-  os <- mapM (\ (func, lines) -> do                                                 o <- run $                                                                        ("echo", [":t", moduleName ++ "." ++ func]) -|-
+doSig :: (Monad m, RunResult (m [Char])) =>
+              ([Char], [Char])
+              -> Module
+              -> [[Char]]
+              -> [([Char], Int)]
+              -> m [[Char]]
+doSig (fDir, fName) (Module moduleName) lines funcLines = do
+  let
+    file = fDir ++ "/" ++ fName
+  os <- mapM (\ (func, lines) -> do
+    o <- run $
+      ("echo", [":t", moduleName ++ "." ++ func]) -|-
       ("ghci", ["-v0", "-w", "-i" ++ fDir, file])
     let
-      [sig] = o
+      sig = init o
       Just (name, funcType) = breakOnSubl " :: " sig
     return (drop 1 $ dropWhile (/= '.') name, funcType)
     ) funcLines
