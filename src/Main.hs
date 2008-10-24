@@ -6,6 +6,7 @@
 
 module Main where
 
+import Control.Applicative
 import Control.Arrow
 import Control.Monad
 import Data.Char
@@ -197,4 +198,7 @@ main = do
       tryIfOpt False OptDependsNuke $ addDepends fPath False
       tryIfOpt True OptTypeSigs $ addSigs (fDir, fName)
   mapM_ f fNames
-  tryIfOpt True OptBuild $ HSH.runIO "cabal install" >> return True
+  -- fixme: or build without cabal (maybe only do that when -b explicitly
+  --    given?)
+  tryIfOpt True OptBuild . ifM (null <$> globsOrNot ["*.cabal"])
+    (return True) $ HSH.runIO "cabal install" >> return True
