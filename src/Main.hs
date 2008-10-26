@@ -78,13 +78,16 @@ addImports fPath ghcArgs = do
     objDir = "obj"
     (fName, fDir) = first reverse . second reverse . break (== '/') $
       reverse fPath
+    -- assume .hs if not .lhs.. is this best?
+    fileTypeArgs = if ".lhs" `isSuffixOf` fPath then [] else ["-x", "hs"]
     iArgs =
       ["--make", "-o", objDir, "-odir", objDir, "-hidir", objDir] ++
       map ("-i" ++) [fDir, "dist/build/autogen"]
   objExistAtStart <- doesDirectoryExist objDir
   unless objExistAtStart $ createDirectory objDir
   (pIn, pOut, pErr, pId) <-
-    runInteractiveProcess "ghc" (fPath:iArgs ++ ghcArgs) Nothing Nothing
+    runInteractiveProcess "ghc" (fileTypeArgs ++ fPath:iArgs ++ ghcArgs)
+    Nothing Nothing
   waitForProcess pId
   unless objExistAtStart $ removeDirectoryRecursive objDir
   errStr <- hGetContents pErr
