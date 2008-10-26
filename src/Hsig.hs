@@ -55,7 +55,7 @@ doSig (fDir, fName) (Module moduleName) lines funcLines = do
     file = fDir ++ "/" ++ fName
   os <- mapM (\ (func, lines) -> do
     o <- run $
-      ("echo", [":t", moduleName ++ "." ++ func]) -|-
+      echo (":t " ++ moduleName ++ "." ++ func) -|-
       ("ghci", ["-v0", "-w", "-i" ++ fDir, file])
     let
       sig = init o
