@@ -82,7 +82,7 @@ addImports fPath ghcArgs = do
       ["--make", "-o", objDir, "-odir", objDir, "-hidir", objDir] ++
       map ("-i" ++) [fDir, "dist/build/autogen"]
   objExistAtStart <- doesDirectoryExist objDir
-  when objExistAtStart $ createDirectory objDir
+  unless objExistAtStart $ createDirectory objDir
   (pIn, pOut, pErr, pId) <-
     runInteractiveProcess "ghc" (fPath:iArgs ++ ghcArgs) Nothing Nothing
   waitForProcess pId
