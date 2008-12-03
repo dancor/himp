@@ -4,6 +4,7 @@ module Hsig where
 
 import Control.Arrow
 import Control.Monad
+import Data.Char
 import Data.Function
 import Data.List
 import FUtil
@@ -44,40 +45,53 @@ eithersSplit [] = ([], [])
 eithersSplit ((Left x):rest) = first (x:) $ eithersSplit rest
 eithersSplit ((Right x):rest) = second (x:) $ eithersSplit rest
 
-doSig :: (Monad m, RunResult (m [Char])) =>
-              ([Char], [Char])
-              -> ModuleName
-              -> [[Char]]
-              -> [([Char], Int)]
-              -> m [[Char]]
-doSig (fDir, fName) (ModuleName moduleName) lines funcLines = do
+onInit :: ([a] -> [a]) -> [a] -> [a]
+onInit f l = (f $ init l) ++ [last l]
+
+doSig :: ([Char], [Char]) -> ModuleName -> [[Char]] -> [([Char], Int)] ->
+  IO [[Char]]
+doSig (fDir, fName) (ModuleName moduleName) ls funcLines = do
   let
     file = fDir ++ "/" ++ fName
-  os <- mapM (\ (func, lines) -> do
+  os <- mapM (\ (func, _) -> do
     o <- run $
       echo (":t " ++ moduleName ++ "." ++ func) -|-
       ("ghci", ["-v0", "-w", "-i" ++ fDir, file])
     let
       sig = init o
       Just (name, funcType) = breakOnSubl " :: " sig
-    return (drop 1 $ dropWhile (/= '.') name, funcType)
+      funcType' = intercalate " " . map (dropWhile isSpace) $ lines funcType
+    return (reversify (takeWhile (/= '.')) name, funcType')
     ) funcLines
   let
     (names, funcTypes) = unzip os
     lineNum = minimum $ map snd funcLines
-    newSig = intercalate ", " (reverse names) ++ " :: " ++ head funcTypes
+    newSigParts = onInit (map (++ ",")) (reverse names) ++ ["::"] ++
+      onInit (map (++ "->")) (breaksOnSubl "-> " $ head funcTypes)
+    newSig = intercalate "\n" $
+      assembleToLimit "" 80 ("" : repeat "  ") " " newSigParts
+    assembleToLimit :: String -> Int -> [String] -> String -> [String] ->
+      [String]
+    assembleToLimit accum _n _prefixes _glue [] = [accum]
+    assembleToLimit [] n (prefix:prefixes) glue (x:xs) =
+      assembleToLimit (prefix ++ x) n prefixes glue xs
+    assembleToLimit accum n prefixes glue (x:xs) = if length accum' > n
+      then accum : assembleToLimit [] n prefixes glue (x:xs)
+      else assembleToLimit accum' n prefixes glue xs
+      where
+      accum' = accum ++ glue ++ x
   when (length (group funcTypes) /= 1) $
     -- fixme more info in error
     error "Adjacent functions have unmatching types."
-  return $ take (lineNum - 1) lines ++ [newSig] ++ drop (lineNum - 1) lines
+  return $ take (lineNum - 1) ls ++ [newSig] ++ drop (lineNum - 1) ls
 
 addSigs :: ([Char], [Char]) -> IO Bool
 addSigs (fDir, fName) = do
   let file = fDir ++ "/" ++ fName
   c <- readFileStrict file
   let
-    (lines', header) = dropHashBang $ lines c
-    parse = parseModule $ unlines lines'
+    (ls, header) = dropHashBang $ lines c
+    parse = parseModule $ unlines ls
     decls = getDecls parse
     vars = getVars decls
     (varAll, varSig) = first M.fromList $ eithersSplit vars
@@ -89,7 +103,7 @@ addSigs (fDir, fName) = do
     varUnsigGrouped = groupBy ((==) `on`
       (\ x -> filter (x `elem`) varsGrouped)) varUnsig
     moduleName = getModuleName parse
-  lines'' <- foldM (doSig (fDir, fName) moduleName) lines' varUnsigGrouped
-  writeFile file . unlines $ header ++ lines''
+  ls' <- foldM (doSig (fDir, fName) moduleName) ls varUnsigGrouped
+  writeFile file . unlines $ header ++ ls'
   hPutStrLn stderr "Checked type-sigs"
   return True
