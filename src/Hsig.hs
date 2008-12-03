@@ -19,24 +19,24 @@ dropHashBang :: [[Char]] -> ([[Char]], [[Char]])
 dropHashBang (l@('#':'!':_):rest) = (rest, [l])
 dropHashBang rest = (rest, [])
 
-parseVars :: HsDecl -> [Either (String, Int) String]
-parseVars (HsFunBind ((HsMatch srcLoc (HsIdent var) _ _ _):_)) =
+parseVars :: Decl -> [Either (String, Int) String]
+parseVars (FunBind ((Match srcLoc (Ident var) _ _ _):_)) =
   [Left (var, srcLine srcLoc)]
-parseVars (HsPatBind srcLoc (HsPVar (HsIdent var)) _ _) =
+parseVars (PatBind srcLoc (PVar (Ident var)) _ _) =
   [Left (var, srcLine srcLoc)]
-parseVars (HsTypeSig _ ((HsIdent v):_) _) = [Right v]
+parseVars (TypeSig _ ((Ident v):_) _) = [Right v]
 parseVars _ = []
 
-getDecls :: ParseResult HsModule -> [HsDecl]
-getDecls (ParseOk (HsModule _ _ _ _ decls)) = decls
+getDecls :: ParseResult Module -> [Decl]
+getDecls (ParseOk (Module _ _ _ _ decls)) = decls
 getDecls x = error $ "Unknown parse result: " ++ show x
 
-getModuleName :: ParseResult HsModule -> Module
-getModuleName (ParseOk (HsModule _ moduleName _ _ _)) = moduleName
+getModuleName :: ParseResult Module -> ModuleName
+getModuleName (ParseOk (Module _ moduleName _ _ _)) = moduleName
 getModuleName x = error $ "Unknown parse result: " ++ show x
 
 -- do i even need nub
-getVars :: [HsDecl] -> [Either (String, Int) String]
+getVars :: [Decl] -> [Either (String, Int) String]
 getVars = nub . concatMap parseVars
 
 eithersSplit :: [Either a a1] -> ([a], [a1])
@@ -46,11 +46,11 @@ eithersSplit ((Right x):rest) = second (x:) $ eithersSplit rest
 
 doSig :: (Monad m, RunResult (m [Char])) =>
               ([Char], [Char])
-              -> Module
+              -> ModuleName
               -> [[Char]]
               -> [([Char], Int)]
               -> m [[Char]]
-doSig (fDir, fName) (Module moduleName) lines funcLines = do
+doSig (fDir, fName) (ModuleName moduleName) lines funcLines = do
   let
     file = fDir ++ "/" ++ fName
   os <- mapM (\ (func, lines) -> do
