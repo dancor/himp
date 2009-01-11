@@ -146,11 +146,15 @@ addDepends fPath justAdd = do
             x -> [x])
       c <- readFileStrict file
       let
+        -- It's probably better to actually parse and rewrite with
+        -- Distribution.PackageDescription.Parse, except that adds blank fields
+        -- and changes spacing, so there might be quite a bit of hackery needed
+        -- there anyway to make it acceptible to ppl.  It's not clear to me
+        -- which approach is less hacky or more maintainable.
         l = lines c
         buildDepHeader = "build-depends:"
-        (preDeps, rest) = break
-          ((filter (not . isSpace) buildDepHeader `isPrefixOf`) .
-          map toLower . dropWhile isSpace) l
+        (preDeps, rest) = break ((buildDepHeader `isPrefixOf`) . map toLower .
+          dropWhile isSpace) l
         (depsAndSpace, postDeps) =
           first (take 1 rest ++) $ break (':' `elem`) (drop 1 rest)
         depsAndInterPostSpace :: [String]
@@ -171,6 +175,8 @@ addDepends fPath justAdd = do
           repeat (replicate (length buildDepHeaderSpace) ' ')) .
           wordComb (79 - 1 - length buildDepHeaderSpace) " " $
           map (++ ",") (init deps') ++ [last deps']
+      when (null rest) . error $ "cabal file should at least have a blank " ++
+        buildDepHeader ++ " line."
       writeFile file . unlines $ preDeps ++ depsLines ++ postSpace ++ postDeps
       hPutStrLn stderr $ "Did depends: " ++ show deps
       return True
