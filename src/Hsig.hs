@@ -21,19 +21,19 @@ dropHashBang (l@('#':'!':_):rest) = (rest, [l])
 dropHashBang rest = (rest, [])
 
 parseVars :: Decl -> [Either (String, Int) String]
-parseVars (FunBind ((Match srcLoc (Ident var) _ _ _):_)) =
+parseVars (FunBind ((Match srcLoc (Ident var) _ _ _ _):_)) =
   [Left (var, srcLine srcLoc)]
-parseVars (PatBind srcLoc (PVar (Ident var)) _ _) =
+parseVars (PatBind srcLoc (PVar (Ident var)) _ _ _) =
   [Left (var, srcLine srcLoc)]
 parseVars (TypeSig _ ((Ident v):_) _) = [Right v]
 parseVars _ = []
 
 getDecls :: ParseResult Module -> [Decl]
-getDecls (ParseOk (Module _ _ _ _ decls)) = decls
+getDecls (ParseOk (Module _ _ _ _ _ _ decls)) = decls
 getDecls x = error $ "Unknown parse result: " ++ show x
 
 getModuleName :: ParseResult Module -> ModuleName
-getModuleName (ParseOk (Module _ moduleName _ _ _)) = moduleName
+getModuleName (ParseOk (Module _ moduleName _ _ _ _ _)) = moduleName
 getModuleName x = error $ "Unknown parse result: " ++ show x
 
 -- do i even need nub

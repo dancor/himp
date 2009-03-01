@@ -158,9 +158,9 @@ addDepends fPath justAdd = do
         (depsAndSpace, postDeps) =
           first (take 1 rest ++) $ break (':' `elem`) (drop 1 rest)
         depsAndInterPostSpace :: [String]
-        (preSpace, depsAndInterPostSpace) = (fst *** uncurry (:)) . seqTup .
+        (preSpace, depsAndInterPostSpace) = (fst *** uncurry (:)) . seqTupL .
           first (span isSpace) $ uncons depsAndSpace
-        (interSpace, depsAndPostSpace) = (fst *** uncurry (:)) $ seqTup .
+        (interSpace, depsAndPostSpace) = (fst *** uncurry (:)) $ seqTupL .
           first (span isSpace . drop (length buildDepHeader)) $
           uncons depsAndInterPostSpace
         interSpace' = if null interSpace then " " else interSpace
