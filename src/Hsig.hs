@@ -16,9 +16,9 @@ import System.Environment
 import qualified Data.Map as M
 import qualified Data.Set as S
 
-dropHashBang :: [[Char]] -> ([[Char]], [[Char]])
-dropHashBang (l@('#':'!':_):rest) = (rest, [l])
-dropHashBang rest = (rest, [])
+breakPossibleHashBang :: [[Char]] -> ([[Char]], [[Char]])
+breakPossibleHashBang (l@('#':'!':_):rest) = ([l], rest)
+breakPossibleHashBang rest = ([], rest)
 
 parseVars :: Decl -> [Either (String, Int) String]
 parseVars (FunBind ((Match srcLoc (Ident var) _ _ _ _):_)) =
@@ -57,6 +57,7 @@ doSig (fDir, fName) (ModuleName moduleName) ls funcLines = do
     o <- run $
       echo (":t " ++ moduleName ++ "." ++ func) -|-
       ("ghci", ["-v0", "-w", "-i" ++ fDir, file])
+    when (null o) . error $ "Could not add type-sig for func " ++ show func
     let
       sig = init o
       Just (name, funcType) = breakOnSubl " :: " sig
@@ -90,7 +91,7 @@ addSigs (fDir, fName) = do
   let file = fDir ++ "/" ++ fName
   c <- readFileStrict file
   let
-    (ls, header) = dropHashBang $ lines c
+    (possibleHashBang, ls) = breakPossibleHashBang $ lines c
     parse = parseModule $ unlines ls
     decls = getDecls parse
     vars = getVars decls
@@ -104,6 +105,6 @@ addSigs (fDir, fName) = do
       (\ x -> filter (x `elem`) varsGrouped)) varUnsig
     moduleName = getModuleName parse
   ls' <- foldM (doSig (fDir, fName) moduleName) ls varUnsigGrouped
-  writeFile file . unlines $ header ++ ls'
+  writeFile file . unlines $ possibleHashBang ++ ls'
   hPutStrLn stderr "Checked type-sigs"
   return True
