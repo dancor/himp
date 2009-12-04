@@ -1,5 +1,13 @@
-Also depends on binaries from: cabal-install, hbuild, hoogle.
-I don't know how to express these deps in cabal..
+himp tries to reduce the overhead of writing haskell programs,
+especially small one-off programs, by automagically doing/guessing
+imports, cabal build-depends, and type-signatures.
+
+Building himp also depends on binaries from: cabal-install, hbuild,
+hoogle.  I don't know how to express these deps in cabal..
 
 todo
-- resolve HSH not being in hoogle (and FUtil if easy..)
+- hoogle is bad
+  - resolve HSH etc not being in hoogle (and FUtil if easy..)
+  - maybe use hayoo, but it seems closed-source?
+- missing LANGUAGE pragma detection on compile?
+
