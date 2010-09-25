@@ -10,6 +10,7 @@ import Control.Applicative
 import Control.Arrow
 import Control.Monad
 import Data.Char
+import Data.Function
 import Data.List
 import Data.Maybe
 import FUtil
@@ -139,8 +140,9 @@ addDepends fPath justAdd = do
   case filter (".cabal" `isSuffixOf`) files of
     [file] -> do
       o <- run ("hbuild", ["-i" ++ fDir, killSuff '.' fName])
-      let depsVers = drop 2 . dropWhile (/= ':') $ (lines o) !! 2
-          deps = sort . map (killSuff '-') $ breaksOnSubl ", " depsVers
+      let depsVers = drop 2 . dropWhile (/= ':') $ lines o !! 2
+          deps = map (flip (,) "") . sort . map (killSuff '-') $
+            breaksOnSubl ", " depsVers
           sedEsc = concatMap (\ x -> case x of
             '/' -> "\\/"
             x -> [x])
@@ -166,10 +168,19 @@ addDepends fPath justAdd = do
         interSpace' = if null interSpace then " " else interSpace
         (postSpace, depsOrigStr) = bothond reverse . span (all isSpace) $
           reverse depsAndPostSpace
-        depsOrig = filter (not . null) . uncalate "," .
+        seperateVersion = second (dropWhile isSpace) . span isLetter
+        unseperateVersion (b, v) =
+          if null v
+            then b
+            else b ++ " " ++ v1 ++ " " ++ dropWhile isSpace v2
+          where
+          (v1, v2) = span (`elem` "<=>") v
+        depsOrig = map seperateVersion . filter (not . null) . uncalate "," .
           filter (not . isSpace) $ intercalate "," depsOrigStr
         buildDepHeaderSpace = buildDepHeader ++ interSpace'
-        deps' = nub . sort $ if justAdd then deps ++ depsOrig else deps
+        deps' = map unseperateVersion . reverse . nubBy ((==) `on` fst) .
+          reverse . sort $
+          if justAdd then deps ++ depsOrig else deps
         depsLines = zipWith (++) (map (preSpace ++) $
           buildDepHeaderSpace:
           repeat (replicate (length buildDepHeaderSpace) ' ')) .
@@ -201,7 +212,7 @@ main = do
     f fName = do
       let
         fPath = fDir ++ "/" ++ fName
-      hPutStrLn stderr fPath
+      hPutStrLn stderr $ "Doing file: " ++ fPath
       tryIfOpt True OptImports $ addImports fPath []
       tryIfOpt True OptDepends $ addDepends fPath True
       tryIfOpt False OptDependsNuke $ addDepends fPath False
