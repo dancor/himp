@@ -168,7 +168,8 @@ addDepends fPath justAdd = do
         interSpace' = if null interSpace then " " else interSpace
         (postSpace, depsOrigStr) = bothond reverse . span (all isSpace) $
           reverse depsAndPostSpace
-        seperateVersion = second (dropWhile isSpace) . span isLetter
+        seperateVersion = second (dropWhile isSpace) . break startsVersionInfo
+        startsVersionInfo = (`elem` "<=>")
         unseperateVersion (b, v) =
           if null v
             then b
